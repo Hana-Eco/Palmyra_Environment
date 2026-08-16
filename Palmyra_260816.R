@@ -874,9 +874,125 @@ plot.diel24_speed
   plot.env24
   
   ## Save plot
-  ggsave("Feedback_Outputs/Environment2024.pdf", 
-         plot=plot.env24, 
-         width = 5, height = 5, units = "in", scale = 1.5, dpi = 600) 
+  #ggsave("Feedback_Outputs/Environment2024.pdf", 
+  #       plot=plot.env24, 
+  #       width = 5, height = 5, units = "in", scale = 1.5, dpi = 600) 
+  
+# ========================================================================================
+#
+#           ####  ~~~~  Testing spatial difference individual parameters  ~~~ ####
+#
+# ======================================================================================== 
+set.seed(1984)
+#### ===> Summarise data to daily averages to reduce noise <=== ####
+  # run if running section alone -> same as next section for testing 
+  ### ===> 2023 
+  env23.daily<-env23%>%
+    select(date, site, par, temp, aou, speed, u, v)%>%
+    pivot_longer(cols = par:v,
+                 names_to = "parameter",
+                 values_to = "measurement")%>%
+    group_by(date, site, parameter)%>%
+    summarise(mean = mean(measurement),
+              sd = sd(measurement))%>%
+    ungroup() %>% 
+    pivot_wider(names_from = parameter, 
+                values_from = c(mean, sd)) 
+  ### ===> 2024 
+  env24.daily<-env23%>%
+    select(date, site, speed, u, v)%>%
+    pivot_longer(cols = speed:v,
+                 names_to = "parameter",
+                 values_to = "measurement")%>%
+    group_by(date, site, parameter)%>%
+    summarise(mean = mean(measurement),
+              sd = sd(measurement))%>%
+    ungroup() %>% 
+    pivot_wider(names_from = parameter, 
+                values_from = c(mean, sd))  
+  
+#### ===> set up data for analysis <=== ####
+  ### ==> meta data
+  meta_DLI<-select(DLI, site)
+  meta_23<-select(env23.daily, site)
+  meta_24<-select(env24.daily, site)
+
+  ### ==> distance matrix
+  dis_DLI<-vegdist(DLI$DLI, method = "euclidean")
+  dis_par<-vegdist(env23.daily$mean_par, method = "euclidean")
+  dis_temp<-vegdist(env23.daily$mean_temp, method = "euclidean")
+  dis_aou<-vegdist(env23.daily$mean_aou, method = "euclidean")
+  dis_speed<-vegdist(env23.daily$mean_speed, method = "euclidean")
+  dis_u<-vegdist(env23.daily$mean_u, method = "euclidean")
+  dis_v<-vegdist(env23.daily$mean_v, method = "euclidean")
+  dis_speed24<-vegdist(env24.daily$mean_speed, method = "euclidean")
+  dis_u24<-vegdist(env24.daily$mean_u, method = "euclidean")
+  dis_v24<-vegdist(env24.daily$mean_v, method = "euclidean")
+  
+#### ===> DLI <=== ####
+per_DLI<-adonis2(dis_DLI~site, data = meta_DLI, permutations = 9999, by = "margin")
+per_DLI
+  ## Pair-wise
+  meta_DLI$sites<-meta_DLI$site
+  per_DLI.pw<-pairwise.adonis2(dis_DLI~sites, data = meta_DLI, nperm = 999)
+  per_DLI.pw
+
+#### ===> PAR <=== ####
+per_par<-adonis2(dis_par~site, data = meta_23, permutations = 9999, by = "margin")
+per_par
+  ## Pair-wise
+  per_par.pw<-pairwise.adonis2(dis_par~site, data = meta_23, nperm = 999)
+  per_par.pw
+  
+#### ===> Temperature <=== ####
+per_temp<-adonis2(dis_temp~site, data = meta_23, permutations = 9999, by = "margin")
+per_temp
+  
+#### ===> AOU <=== ####
+per_aou<-adonis2(dis_aou~site, data = meta_23, permutations = 9999, by = "margin")
+per_aou
+  
+#### ===> Speed 2023 <=== ####
+per_speed<-adonis2(dis_speed~site, data = meta_23, permutations = 9999, by = "margin")
+per_speed
+  ## Pair-wise
+  per_speed.pw<-pairwise.adonis2(dis_speed~site, data = meta_23, nperm = 999)
+  per_speed.pw
+  
+#### ===> u 2023 <=== ####
+per_u<-adonis2(dis_u~site, data = meta_23, permutations = 9999, by = "margin")
+per_u
+  ## Pair-wise
+  per_u.pw<-pairwise.adonis2(dis_u~site, data = meta_23, nperm = 999)
+  per_u.pw
+  
+#### ===> v 2023 <=== ####
+per_v<-adonis2(dis_v~site, data = meta_23, permutations = 9999, by = "margin")
+per_v
+  ## Pair-wise
+  per_v.pw<-pairwise.adonis2(dis_v~site, data = meta_23, nperm = 999)
+  per_v.pw
+  
+#### ===> Speed 2024 <=== ####
+per_speed24<-adonis2(dis_speed24~site, data = meta_24, permutations = 9999, by = "margin")
+per_speed24
+  ## Pair-wise
+  per_speed24.pw<-pairwise.adonis2(dis_speed24~site, data = meta_24, nperm = 999)
+  per_speed24.pw
+  
+#### ===> u 2024 <=== ####
+per_u24<-adonis2(dis_u24~site, data = meta_24, permutations = 9999, by = "margin")
+per_u24
+  ## Pair-wise
+  per_u24.pw<-pairwise.adonis2(dis_u24~site, data = meta_24, nperm = 999)
+  per_u24.pw
+  
+#### ===> v 2024 <=== ####
+per_v24<-adonis2(dis_v24~site, data = meta_24, permutations = 9999, by = "margin")
+per_v24
+  ## Pair-wise
+  per_v24.pw<-pairwise.adonis2(dis_v24~site, data = meta_24, nperm = 999)
+  per_v24.pw
   
 # ========================================================================================
 #
@@ -885,6 +1001,7 @@ plot.diel24_speed
 # ========================================================================================   
 set.seed(1984)
 #### ===> Summarise data to daily averages to reduce noise <=== ####
+# run if running section alone -> same as previous section for testing 
 env23.daily<-env23%>%
     select(date, site, par, temp, aou, speed, u, v)%>%
     pivot_longer(cols = par:v,
