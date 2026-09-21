@@ -271,13 +271,6 @@ env24<-read.csv("Data/Env_flow_24.csv",stringsAsFactors = TRUE)%>%
       mutate(doy = yday(date),
              month = month(date,label = TRUE),
              year = year(date))%>%as.data.frame()
-
-#### ===> Calculate the Daily light integral <=== ####    
-DLI<-env23%>%
-      filter(hms(format(datetime, "%H:%M:%S")) >= sunrise &
-               hms(format(datetime, "%H:%M:%S")) <= sunset)%>%
-      group_by(site, date)%>%
-      summarise(DLI = sum(par.inst))%>%as.data.frame()
 #
 #
 #
@@ -615,6 +608,7 @@ plot.tidePAR_HR
   m1b <- bam(par_rel ~ site + s(t_hour, by = site, bs = "cc", k = 6) + s(t_num, k = 25),
              data = dat, knots = list(t_hour = c(0, 12.42)),
              rho = r, AR.start = dat$new_day, method = "fREML")
+  summary(m1b)
   
   m3  <- bam(par_rel ~ site + s(t_hour, bs = "cc", k = 6) + s(t_num, k = 25),
              data = dat, knots = list(t_hour = c(0, 12.42)),
@@ -929,14 +923,6 @@ set.seed(1984)
   dis_u24<-vegdist(env24.daily$mean_u, method = "euclidean")
   dis_v24<-vegdist(env24.daily$mean_v, method = "euclidean")
   
-#### ===> DLI <=== ####
-per_DLI<-adonis2(dis_DLI~site, data = meta_DLI, permutations = 9999, by = "margin")
-per_DLI
-  ## Pair-wise
-  meta_DLI$sites<-meta_DLI$site
-  per_DLI.pw<-pairwise.adonis2(dis_DLI~sites, data = meta_DLI, nperm = 999)
-  per_DLI.pw
-
 #### ===> PAR <=== ####
 per_par<-adonis2(dis_par~site, data = meta_23, permutations = 9999, by = "margin")
 per_par
