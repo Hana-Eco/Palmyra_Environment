@@ -245,6 +245,25 @@ env24<-read.csv("Data/Env_flow_24.csv",stringsAsFactors = TRUE)%>%
       summarise(mean = mean(value, na.rm = TRUE),
                 se   = sd(value, na.rm = TRUE) / sqrt(sum(!is.na(value))))%>%
       mutate(variable=as.factor(variable))%>%as.data.frame()
+    ## check min max
+      # daily 
+      diel23%>%
+        group_by(site, variable)%>%
+        summarise(max = max(mean),
+               min = min(mean),
+               range = max - min)%>%print(n=Inf)
+      
+      # sampling
+      env23%>%
+        select(datetime, site,par, temp, do, dsat, aou, speed, u, v)%>%
+        mutate(tod = hour(datetime) + minute(datetime) / 60)%>%
+        pivot_longer(c(par, temp, do, dsat, aou, speed, u, v),
+                     names_to = "variable", 
+                     values_to = "value")%>%
+        group_by(site, variable)%>%
+        summarise(min = min(value),
+                  max = max(value),
+                  range = max - min)%>%print(n=Inf)
   
   ### ==> 2024 data
   diel24<-env24%>%
@@ -257,7 +276,15 @@ env24<-read.csv("Data/Env_flow_24.csv",stringsAsFactors = TRUE)%>%
     summarise(mean = mean(value, na.rm = TRUE),
               se   = sd(value, na.rm = TRUE) / sqrt(sum(!is.na(value))))%>%
     mutate(variable=as.factor(variable))%>%as.data.frame()
-  
+    
+    ## check min max
+    # daily 
+    diel24%>%
+      group_by(site, variable)%>%
+      summarise(max = max(mean),
+                min = min(mean),
+                range = max - min)%>%print(n=Inf)
+    
 #### ===> Isolate temperature data to plot with USWF data <=== ####
   ### ==> Filter to night time SST
   temp_night<-env23%>%
@@ -306,6 +333,31 @@ plot.crw_sst<-ggplot()+
         axis.text.x = element_text(angle = 45, hjust = 1),
         legend.position = "bottom")
 plot.crw_sst
+
+  # check max temp for 2023
+  sstPix%>%
+    filter(year == 2023)%>%
+    #group_by(month)%>%
+    summarise(max_SST = max(crw_sst),
+              max_dhw = max(crw_dhw))
+  # check hl year
+  sstPix%>%
+    filter(year == 1998)%>%
+    #group_by(month)%>%
+    summarise(max_SST = max(crw_sst),
+              max_dhw = max(crw_dhw))
+  sstPix%>%
+    filter(year == 2009)%>%
+    #group_by(month)%>%
+    summarise(max_SST = max(crw_sst),
+              max_dhw = max(crw_dhw))
+  
+  sstPix%>%
+    filter(year == 2015)%>%
+    #group_by(month)%>%
+    summarise(max_SST = max(crw_sst),
+              max_dhw = max(crw_dhw))
+  
     
 #### ===> NOAA DHW plot <=== ####
 plot.crw_dhw<-ggplot()+
@@ -353,6 +405,11 @@ plot.uswf<-ggplot()+
         axis.text.x = element_text(angle = 45, hjust = 1),
         legend.position = "bottom")
 plot.uswf
+  # check max
+  uswf.night_sum%>%
+    filter(year == 2023)%>%
+    group_by(month)%>%
+    summarise(max_SST = max(temp_c))
 
 #### ===> plot box plots for period with NOAA SST and insitu USWF <=== ####
   ### ==> Group situ with NOAA SST and USWF in situ data
@@ -386,6 +443,13 @@ plot.uswf
     theme(axis.title.x = element_blank(),
           legend.position = "none")
   plot.intemp
+  
+    ## check max temp for sites
+    temp_night_sum%>%
+      group_by(site)%>%
+      summarise(max_temp=max(temp_c),
+                mix_tenp=min(temp_c))
+  
   
 #### ===> plot diel in situ temperature variation <=== ####
 plot.diel23_temp<-ggplot(data = diel23%>%filter(variable=="temp"),
@@ -649,7 +713,9 @@ plot.tidePAR_HR
 #### ===> Box plots <=== ####
   ### ==> PAR
   plot_box.par<-ggplot(data = env23%>%filter(hms(format(datetime, "%H:%M:%S")) >= sunrise &
-                                                hms(format(datetime, "%H:%M:%S")) <= sunset),
+                                                hms(format(datetime, "%H:%M:%S")) <= sunset)%>%
+                         group_by(date, site)%>%
+                         summarise(par = mean(par)),
                         aes(x=site, y=par, fill=site, color=site))+ 
     geom_boxplot(width = 0.15, outlier.shape = NA, alpha = 0.6)+
     labs(y=expression(PAR~(µmol~m^-2~s^-1)), x="")+
@@ -670,8 +736,24 @@ plot.tidePAR_HR
     theme(legend.position = "none")
   plot_box.aou
   
+  plot_box.aou2<-ggplot(data = env23%>%
+                          filter(hms(format(datetime, "%H:%M:%S")) <= sunrise | 
+                                   hms(format(datetime, "%H:%M:%S")) >= sunset)%>%
+                          group_by(date, site)%>%
+                          summarise(aou = mean(aou)),
+                       aes(x=site, y=aou, fill=site, color=site))+ #fct_rev(site)
+    geom_boxplot(width = 0.15, outlier.shape = NA, alpha = 0.6)+
+    labs(y=expression(AOU~(mg~l^-1)), x="")+
+    scale_fill_manual(values = pal_cols)+
+    scale_color_manual(values = pal_cols)+
+    theme_classic(base_size = 11)+
+    theme(legend.position = "none")
+  plot_box.aou2
+  
   ### ==> Speed
-  plot_box.speed<-ggplot(data = env23,
+  plot_box.speed<-ggplot(data = env23%>%
+                           group_by(date, site)%>%
+                           summarise(speed = mean(speed)),
                         aes(x=site, y=speed, fill=site, color=site))+ #fct_rev(site)
     geom_boxplot(width = 0.15, outlier.shape = NA, alpha = 0.6)+
     labs(y=expression(Speed~(cm~s^-1)), x="")+
@@ -773,8 +855,8 @@ plot.tidePAR_HR
   ## combine plots
   plot.env<-(
      plot_box.par+plot.diel23_par+
+     plot_box.aou2+plot.diel23_aou+
      plot_box.speed+plot.diel23_speed+
-     plot_box.aou+plot.diel23_aou+
      plot.rose23)+
     plot_layout(design = layout_env23)+
     plot_annotation(tag_levels = "A")
@@ -791,7 +873,9 @@ plot.tidePAR_HR
 #
 # ========================================================================================  
 #### ===> Box plot <=== ####
-plot_box.speed24<-ggplot(data = env24,
+plot_box.speed24<-ggplot(data = env24%>%
+                           group_by(date, site)%>%
+                           summarise(speed = mean(speed)),
                        aes(x=site, y=speed, fill=site, color=site))+ #fct_rev(site)
   geom_boxplot(width = 0.15, outlier.shape = NA, alpha = 0.6)+
   labs(y=expression(Speed~(cm~s^-1)), x="")+
@@ -868,9 +952,9 @@ plot.diel24_speed
   plot.env24
   
   ## Save plot
-  #ggsave("Feedback_Outputs/Environment2024.pdf", 
-  #       plot=plot.env24, 
-  #       width = 5, height = 5, units = "in", scale = 1.5, dpi = 600) 
+  ggsave("Feedback_Outputs/Environment2024.pdf", 
+         plot=plot.env24, 
+         width = 5, height = 5, units = "in", scale = 1.5, dpi = 600) 
   
 # ========================================================================================
 #
@@ -892,8 +976,39 @@ set.seed(1984)
     ungroup() %>% 
     pivot_wider(names_from = parameter, 
                 values_from = c(mean, sd)) 
+    
+    ## chech min max
+    env23%>%
+      select(date, site, par, temp, aou, speed, u, v)%>%
+      pivot_longer(cols = par:v,
+                   names_to = "parameter",
+                   values_to = "measurement")%>%
+      group_by(date, site, parameter)%>%
+      summarise(mean = mean(measurement))%>%
+      group_by(site, parameter)%>%
+      summarise(min = min(mean),
+              max = max(mean),
+              range = max - min)%>%print(n=Inf)
+  
+    ## summarise day time for par and night time for aou to match plot
+    par.daily<-env23%>%
+      filter(hms(format(datetime, "%H:%M:%S")) >= sunrise &
+                        hms(format(datetime, "%H:%M:%S")) <= sunset)%>%
+      select(date, site, par)%>%
+      group_by(date, site)%>%
+      summarise(mean = mean(par),
+                sd = sd(par))%>%as.data.frame()
+    
+    aou.daily<-env23%>%
+      filter(hms(format(datetime, "%H:%M:%S")) >= sunrise |
+               hms(format(datetime, "%H:%M:%S")) <= sunset)%>%
+      select(date, site, aou)%>%
+      group_by(date, site)%>%
+      summarise(mean = mean(aou),
+                sd = sd(aou))%>%as.data.frame()
+  
   ### ===> 2024 
-  env24.daily<-env23%>%
+  env24.daily<-env24%>%
     select(date, site, speed, u, v)%>%
     pivot_longer(cols = speed:v,
                  names_to = "parameter",
@@ -903,19 +1018,39 @@ set.seed(1984)
               sd = sd(measurement))%>%
     ungroup() %>% 
     pivot_wider(names_from = parameter, 
-                values_from = c(mean, sd))  
+                values_from = c(mean, sd)) 
+  
+    ## check min max
+    env24.daily<-env24%>%
+      select(date, site, speed, u, v)%>%
+      pivot_longer(cols = speed:v,
+                   names_to = "parameter",
+                   values_to = "measurement")%>%
+      group_by(date, site, parameter)%>%
+      summarise(mean = mean(measurement))%>%
+      group_by(site, parameter)%>%
+      summarise(min = min(mean),
+                max = max(mean),
+                range = max - min)%>%print(n=Inf)
   
 #### ===> set up data for analysis <=== ####
   ### ==> meta data
-  meta_DLI<-select(DLI, site)
+  meta_par<-select(par.daily, site)
+  meta_aou<-select(aou.daily, site)
+  
   meta_23<-select(env23.daily, site)
   meta_24<-select(env24.daily, site)
 
   ### ==> distance matrix
-  dis_DLI<-vegdist(DLI$DLI, method = "euclidean")
   dis_par<-vegdist(env23.daily$mean_par, method = "euclidean")
+  dis_par2<-vegdist(par.daily$mean, method = "euclidean")
+  
   dis_temp<-vegdist(env23.daily$mean_temp, method = "euclidean")
+  
   dis_aou<-vegdist(env23.daily$mean_aou, method = "euclidean")
+  dis_aou2<-vegdist(aou.daily$mean, method = "euclidean")
+  
+  
   dis_speed<-vegdist(env23.daily$mean_speed, method = "euclidean")
   dis_u<-vegdist(env23.daily$mean_u, method = "euclidean")
   dis_v<-vegdist(env23.daily$mean_v, method = "euclidean")
@@ -926,9 +1061,16 @@ set.seed(1984)
 #### ===> PAR <=== ####
 per_par<-adonis2(dis_par~site, data = meta_23, permutations = 9999, by = "margin")
 per_par
+
+per_par<-adonis2(dis_par2~site, data = meta_par, permutations = 9999, by = "margin")
+per_par
+
   ## Pair-wise
   per_par.pw<-pairwise.adonis2(dis_par~site, data = meta_23, nperm = 999)
   per_par.pw
+  
+  per_par.pw2<-pairwise.adonis2(dis_par2~site, data = meta_par, nperm = 999)
+  per_par.pw2
   
 #### ===> Temperature <=== ####
 per_temp<-adonis2(dis_temp~site, data = meta_23, permutations = 9999, by = "margin")
@@ -937,6 +1079,9 @@ per_temp
 #### ===> AOU <=== ####
 per_aou<-adonis2(dis_aou~site, data = meta_23, permutations = 9999, by = "margin")
 per_aou
+
+per_aou2<-adonis2(dis_aou2~site, data = meta_aou, permutations = 9999, by = "margin")
+per_aou2
   
 #### ===> Speed 2023 <=== ####
 per_speed<-adonis2(dis_speed~site, data = meta_23, permutations = 9999, by = "margin")
@@ -1072,6 +1217,7 @@ env23.daily<-env23%>%
       # PC1 was a day effect -> so use RDA_full_both for plotting
     ## run ANOVAs
     anova(RDA_full_date, permutations = 9999)
+    anova(RDA_full_both, permutations = 9999)
     anova(RDA_full_both, by = "axis", permutations = 9999)
     RsquareAdj(RDA_full_both)     # for the site effect adjusted for date
     ## pairwise testing to see which sites differ
@@ -1305,17 +1451,27 @@ percent_l<-percent_w%>%
     group_by(name, year, site, site_state,transect, genera) %>%
     summarise(cover = sum(cover))%>%
     as.data.frame()
+  
+#### ===> summarise pre-bleaching coomunity and change <=== ####
+  ### ==> benthic group
+  major_ben_sum<-major_ben%>%
+    group_by(site, year, ben_group)%>%
+    summarise(mean=mean(cover))
+  ### ==> genera  
+  genera_sum<-genera%>%
+    group_by(site, year, genera)%>%
+    summarise(mean=mean(cover))
 
 # ========================================================================================
 #
-#                            ####  ~~~~  dbRDA  ~~~ ####
+#                            ####  ~~~~  dbRDA & PERMANOVA ~~~ ####
 #
 # ========================================================================================
 set.seed(1984)
 #### ===> Set up data <=== ####
   ### ==> meta data
   com_meta<-select(percent_w, name, site, transect, year, site_state)
-
+      com_meta$cell<-com_meta$site_state
   ### ==> isolate living community - dropping sand only
   com_raw<-select(percent_w, acr_bra:sarco, bran_calc:turf_rubbl)
     ## square root transform data
@@ -1327,7 +1483,7 @@ set.seed(1984)
   mds$stress   # < 0.2 usable, < 0.1 good  -> 0.1683329
   plot(mds)
   ordiellipse(mds, com_meta$site_state, kind = "sd", label = TRUE)
-  
+
 #### ===> Assess dispersion of the communities <=== ####
   ### ==> Zero adjusted 
   bd_all<-betadisper(com_d, interaction(com_meta$site, com_meta$year), add = "lingoes")
@@ -1351,8 +1507,38 @@ set.seed(1984)
 # ~ Note: this is to justify running at quadrat level and not transect level
 adonis2(com_d ~ site_state/transect, data = com_meta, by = "terms", permutations = 9999)
   # site_state explains 46.2% of variation
-  # transect within each site_state explains 2.7% of variation -> effect is minimal even if signficant
-
+  # transect within each site_state explains 2.7% of variation -> effect is minimal even if significant
+  
+  ## check specifically for inshore beacause of acropora
+  i <- com_meta$site == "Inshore"
+  md_in <- droplevels(com_meta[i, ])
+  d_in  <- as.dist(as.matrix(com_d)[i, i])
+  
+  # transect within period — is the pre/post signal confounded with placement?
+  adonis2(d_in ~ year/transect, data = md_in, by = "terms", permutations = 9999)
+  
+  for (s in c("Offshore", "Midshore")) {
+    i <- com_meta$site == s
+    cat("\n---", s, "---\n")
+    print(adonis2(as.dist(as.matrix(com_d)[i,i]) ~ year/transect,
+                  data = droplevels(com_meta[i,]), by = "terms", permutations = 9999))
+  }
+  
+  for (t in c("T1", "T2")) {
+    j  <- com_meta$transect == t
+    dj <- as.dist(as.matrix(com_d)[j, j])
+    cj <- betadisper(dj, droplevels(com_meta$cell[j]))$centroids
+    D  <- as.matrix(dist(cj))
+    cat("\n---", t, "---\n")
+    print(round(c(Mid_In_pre   = D["Midshore.Pre","Inshore.Pre"],
+                  Mid_In_post  = D["Midshore.Post","Inshore.Post"],
+                  Off_Mid_pre  = D["Offshore.Pre","Midshore.Pre"],
+                  Off_Mid_post = D["Offshore.Post","Midshore.Post"]), 3))
+  }
+  
+#### ===> PERMANOVA to test for spatial and temporal effects <=== ####
+adonis2(com_d ~ site * year, data = com_meta, permutations = 9999, by = "terms")
+  
 #### ===> compute dbRDA <=== #### 
   ### ==> dbRDA  normal model
   com_db<-dbrda(com_d ~ site * year, data = com_meta)
@@ -1423,7 +1609,8 @@ adonis2(com_d ~ site_state/transect, data = com_meta, by = "terms", permutations
       )
       # check whether midshore post became more like inshore pre
       Dc["Midshore.Post", "Inshore.Pre"]    # vs Dc["Midshore.Pre","Inshore.Pre"] = 0.512
-   
+      
+
 #### ==> pair-wise comparisons within sites using SIMPER and cohens-d <=== ####
   ## calculate shift 
   data.frame(
@@ -1533,6 +1720,110 @@ simp <- lapply(levels(com_meta$site), function(s) {
           legend.key.height = unit(0.8, "lines"))
   plot.dbRDA_global
   
+#### ===> plot pre-bleaching model <=== ####
+  ### ==> set up to isoalte pre-bleaching community 
+  i_pre  <- com_meta$year == "Pre"
+  d_pre  <- as.dist(as.matrix(com_d)[i_pre, i_pre])
+  md_pre <- droplevels(com_meta[i_pre, ])
+  
+  ### ==> run dbRDA 
+  db_pre <- dbrda(d_pre ~ site, data = md_pre)
+  sppscores(db_pre) <- com_t[i_pre, ]
+    ## check for signficance
+    db_pre
+    RsquareAdj(db_pre)
+    anova(db_pre, permutations = 9999)
+    anova(db_pre, by = "axis", permutations = 9999)
+    
+    ## pairwise test between site 
+    sp_pairs <- combn(levels(md_pre$site), 2, simplify = FALSE)
+    do.call(rbind, lapply(sp_pairs, function(p) {
+    j <- md_pre$site %in% p
+    a <- adonis2(as.dist(as.matrix(d_pre)[j, j]) ~ site,
+                 data = droplevels(md_pre[j, ]), permutations = 9999)
+    data.frame(contrast = paste(p, collapse = " vs "),
+               R2 = a$R2[1], F = a$F[1], p = a$`Pr(>F)`[1])
+    }))
+    
+    ## pairwise SIMPER to determine which species are driving differences
+    sim_pre <- summary(simper(com_t[i_pre, ], md_pre$site, permutations = 999))
+    names(sim_pre)   # three contrasts
+    lapply(sim_pre, function(x) head(x[x$ratio > 1, ], 8))
+    
+    ## axis percentage
+    ev      <- eigenvals(db_pre, model = "constrained")
+    pct_tot <- round(100 * ev / db_pre$tot.chi, 1)      # axis labels
+    pct_con <- round(100 * ev / sum(ev), 1)             # 86.7 / 13.3 -> text only
+    
+    ## site scores
+    sit <- as.data.frame(scores(db_pre, display = "wa", choices = 1:2, scaling = 2))
+    names(sit) <- c("ax1", "ax2")
+    sit$site <- md_pre$site
+    
+    cen <- aggregate(sit[, 1:2], by = list(site = sit$site), FUN = mean)
+    
+    # species scores
+    sp <- as.data.frame(scores(db_pre, display = "species", choices = 1:2, scaling = 2))
+    names(sp) <- c("ax1", "ax2")
+    sp$taxon <- rownames(sp)
+    
+    # keep taxa significant in any pairwise SIMPER contrast
+    keep <- unique(unlist(lapply(sim_pre, function(x) rownames(x)[x$p < 0.05]))) # too many need to reduce
+    
+    pre_prof <- sapply(c("Offshore","Midshore","Inshore"),
+                       function(s) colMeans(as.matrix(com_raw)[com_meta$site == s &
+                                                                 com_meta$year == "Pre", , drop = FALSE]))
+    round(pre_prof[order(-rowMeans(pre_prof)), ], 2)
+    
+    sig  <- unique(unlist(lapply(sim_pre, function(x) rownames(x)[x$p < 0.05])))
+    abun <- rownames(pre_prof)[apply(pre_prof, 1, max) >= 2]
+    keep <- intersect(sig, abun)
+    keep <- keep[!is.na(keep)]
+    
+    sp   <- sp[sp$taxon %in% keep, ]
+    
+    mult <- 2.2   # arrow scaling — tune after first render
+    # cap arrpw length to account for turf rubble which was distorting figure
+    sp$len   <- sqrt(sp$ax1^2 + sp$ax2^2)
+    cap      <- as.numeric(quantile(sp$len, 0.85))
+    sp$scale <- pmin(1, cap / sp$len)
+    sp$xend  <- sp$ax1 * sp$scale * mult
+    sp$yend  <- sp$ax2 * sp$scale * mult
+    sp$capped <- sp$len > cap       
+    
+    sp[sp$capped, c("taxon", "len")]
+    sp <- sp[sqrt(sp$ax1^2 + sp$ax2^2) > 0.15, ]
+    
+    ## plot figure
+    plot.dbrda_pre<-ggplot(sit, aes(ax1, ax2)) +
+      geom_vline(xintercept = 0, colour = "grey85", linewidth = 0.3) +
+      geom_hline(yintercept = 0, colour = "grey85", linewidth = 0.3) +
+      geom_point(aes(colour = site), shape=1, size = 1.5, alpha = 0.45) +
+      stat_ellipse(aes(colour = site), type = "t", level = 0.95, linewidth = 0.8) +
+      geom_point(data = cen, aes(colour = site), size = 3.8, shape = 18,
+                 show.legend = FALSE) +
+      geom_segment(data = sp,
+                   aes(x = 0, y = 0, xend = xend, yend = yend),
+                   arrow = arrow(length = unit(0.15, "cm")),
+                   colour = "grey30", linewidth = 0.4, inherit.aes = FALSE) +
+      geom_text_repel(data = sp,
+                      aes(x = xend, y = yend, label = taxon),
+                      size = 2.9, colour = "grey15",
+                      segment.colour = "grey65", min.segment.length = 0.2,
+                      box.padding = 0.55, point.padding = 0.2,
+                      max.overlaps = Inf, seed = 1, inherit.aes = FALSE) +
+      
+      scale_colour_manual(values = pal_cols) +
+      coord_equal() +
+      labs(x = paste0("dbRDA1 (", pct_tot[1], "%)"),
+           y = paste0("dbRDA2 (", pct_tot[2], "%)")) +
+      theme_classic(base_size = 11) +
+      theme(panel.grid = element_blank(),
+            strip.background = element_rect(fill = "grey96", colour = NA),
+            strip.text = element_text(size = 9),
+            legend.position = "bottom")
+    plot.dbrda_pre
+    
 #### ===> plot site specific dbRDA <=== ####
 # One two-level factor per model -> exactly 1 constrained axis -> is the pre/post gradient
 # Plotted against the first residual (MDS1) axis -> allows for direct interpretation
@@ -1617,14 +1908,14 @@ simp <- lapply(levels(com_meta$site), function(s) {
     plot.dbRDA_site 
     
 #### ===> stitch figures <=== #### 
-plot.dbRDA <- plot.dbRDA_global / plot.dbRDA_site + 
+plot.dbRDA <- (plot.dbrda_pre|plot.dbRDA_global) / plot.dbRDA_site + 
       plot_layout(heights = c(1.15, 1))+
       plot_annotation(tag_levels = "A")
 plot.dbRDA
   ## Save plot
-  #ggsave("Feedback_Outputs/dbRDA.pdf", 
-  #       plot=plot.dbRDA, 
-  #       width = 5, height = 6, units = "in", scale = 1.5, dpi = 600) 
+  ggsave("Feedback_Outputs/dbRDA.pdf", 
+         plot=plot.dbRDA, 
+         width = 5, height = 6, units = "in", scale = 1.5, dpi = 600) 
   
 # ========================================================================================
 #
