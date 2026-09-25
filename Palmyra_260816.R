@@ -359,7 +359,7 @@ plot.crw_sst
               max_dhw = max(crw_dhw))
   
     
-#### ===> NOAA DHW plot <=== ####
+#### ===> plot NOAA DHW  <=== ####
 plot.crw_dhw<-ggplot()+
   # all years except ENSO years
   geom_line(data = sstPix%>%filter(year != hl_years), 
@@ -462,29 +462,134 @@ plot.diel23_temp<-ggplot(data = diel23%>%filter(variable=="temp"),
   labs(y="Temperature (\u00B0C)", x="Time of day")+
   scale_fill_manual(values = pal_cols)+
   scale_color_manual(values = pal_cols)+
-  theme_classic(base_size = 11)
+  theme_classic(base_size = 11)+
+      theme(legend.position = "none")
 plot.diel23_temp
+
+#### ==> plot daily temperature range <===
+  ### ===> calculate mean daily range
+    ## isolate temperature
+    temp_daily<-select(env23, date, datetime,site, temp)
+    ## calculate
+    daily_stats <- function(d) {
+      d %>%
+        group_by(site, date) %>%
+        summarise(n_obs  = n(),
+                  t_mean = mean(temp, na.rm = TRUE),
+                  t_min  = min(temp,  na.rm = TRUE),
+                  t_max  = max(temp,  na.rm = TRUE),
+                  .groups = "drop") %>%
+        mutate(t_range = t_max - t_min)
+    }
+    daily30 <- daily_stats(temp_daily)
+
+    ## summarise data
+    summ_fun <- function(d) {
+      d %>% summarise(n_days     = n(),
+                      mean_range = mean(t_range),
+                      sd_range   = sd(t_range),
+                      se_range   = sd(t_range) / sqrt(n()),
+                      median     = median(t_range),
+                      max_range  = max(t_range),
+                      pct_gt1    = 100 * mean(t_range > 1),
+                      .groups = "drop")
+    }
+    
+    range_by_site_year <- daily_c %>% group_by(site, year) %>% summ_fun()
+    range_by_site      <- daily_c %>% group_by(site)       %>% summ_fun()
+    
+    range_by_site_year
+    range_by_site
+    
+  ### ===> Plot
+  ## historgram
+  plot.temprange<-ggplot(daily_c, aes(x = t_range, fill = site)) +
+    geom_histogram(binwidth = 0.1, boundary = 0,
+                   position = "dodge",  linewidth = 0.5) +
+    scale_fill_manual(values = pal_cols, name = NULL) +
+    scale_colour_manual(values = pal_cols, guide = "none") +
+    scale_linetype_manual(values = c("dotted", "dashed"), name = NULL) +
+    scale_x_continuous(breaks = seq(0, 2, 0.5),
+                       expand = expansion(mult = c(0, 0.01))) +
+    # whole-day counts only (no 2.5 / 7.5 ticks)
+    scale_y_continuous(breaks = function(l) seq(0, ceiling(l[2]), by = 2),
+                       expand = expansion(mult = c(0, 0.05))) +
+    # coord_cartesian zooms without dropping data (scale limits would drop bars)
+    # use xlim = c(0, 2) for a tighter view, c(0, 3) to match Fox et al. exactly
+    coord_cartesian(xlim = c(0, 2)) +
+    labs(x = "Daily temperature range (\u00B0C)",
+         y = "Number of days") +
+    guides(fill     = guide_legend(order = 1),
+           linetype = guide_legend(order = 2, override.aes = list(linewidth = 0.6))) +
+    theme_classic(base_size = 11) +
+    theme(legend.position = "none",
+          legend.box      = "vertical",
+          legend.spacing.y = unit(0, "pt"))
+  plot.temprange
+  
+  ## dot plot
+  dot_bin <- 0.05   # bin width (C); smaller = less stacking, more like raw values
+  dot_gap <- 0.13   # vertical spacing between stacked dots (in row units)
+  
+  # row position for each site (offshore on top)
+  site_levels <- c("Offshore", "Midshore", "Inshore")
+  site_pos <- data.frame(site = factor(site_levels, levels = site_levels),
+                         pos  = rev(seq_along(site_levels)))
+  
+  means_pos <- site_means %>% left_join(site_pos, by = "site")
+  
+  dots <- daily_c %>%
+    mutate(bin_mid = (floor(t_range / dot_bin) + 0.5) * dot_bin) %>%
+    group_by(site, bin_mid) %>%
+    arrange(t_range, .by_group = TRUE) %>%
+    mutate(k     = row_number(),
+           y_off = (k - (n() + 1) / 2) * dot_gap) %>%   # centre each stack on its row
+    ungroup() %>%
+    left_join(site_pos, by = "site") %>%
+    mutate(y = pos + y_off)
+  
+  plot.temprange2<-ggplot() +
+    # one dot per day
+    geom_point(data = dots, aes(x = bin_mid, y = y, fill = site),
+               shape = 21, size = 3, colour = "white", stroke = 0.3) +
+    # site means (drawn on top so dots don't hide them)
+    geom_segment(data = means_pos,
+                 aes(x = mean_range, xend = mean_range, y = pos - 0.42, yend = pos + 0.42),
+                 colour = "black", linewidth = 0.7) +
+    scale_y_continuous(breaks = site_pos$pos, labels = as.character(site_pos$site),
+                       expand = expansion(add = 0.5)) +
+    scale_x_continuous(breaks = seq(0, 3, 0.5), expand = expansion(mult = c(0, 0.01))) +
+    coord_cartesian(xlim = c(0, 2)) +            # c(0, 3) to match Fox et al.'s axis
+    scale_fill_manual(values = pal_cols, guide = "none") +   # rows are labelled
+    scale_linetype_manual(values = c("dotted", "dashed"), name = NULL) +
+    labs(x = "Daily temperature range (\u00B0C)", y = NULL) +
+    theme_classic(base_size = 11) +
+    theme(legend.position = "bottom",
+          axis.line.y     = element_blank(),
+          axis.ticks.y    = element_blank(),
+          axis.text.y     = element_text(face = "bold", colour = "black"))
+  plot.temprange2
 
 #### ===> Stitch plots <=== ####  
   ## plot layout
   layout.temp<-("
-               AABB
-               CCDD
-               #EE#
+               AB
+               CD
+               EF
                ")
   ## stitch plot
   plot.temp<-(
               plot.crw_sst+plot.crw_dhw+
               plot.uswf+plot.intemp+
-              plot.diel23_temp
+              plot.diel23_temp+plot.temprange
               )+
       plot_layout(design = layout.temp)+
       plot_annotation(tag_levels = "A")   
   plot.temp
   
   ## Save plot
-  #ggsave("Feedback_Outputs/Temperature.pdf", 
-  #       plot =plot.temp, width = 5, height = 6, units = "in", scale = 1.5, dpi = 600) 
+  ggsave("Feedback_Outputs/Temperature.pdf", 
+         plot =plot.temp, width = 5, height = 6, units = "in", scale = 1.5, dpi = 600) 
 
 #
 #
@@ -1453,6 +1558,13 @@ percent_l<-percent_w%>%
     as.data.frame()
   
 #### ===> summarise pre-bleaching coomunity and change <=== ####
+  ### ==> ungrouped
+  percent_l_sum<-percent_l%>%
+    group_by(site, year, benthos)%>%
+    summarise(mean=mean(cover))%>%
+    pivot_wider(names_from = year,
+                values_from = mean)
+  
   ### ==> benthic group
   major_ben_sum<-major_ben%>%
     group_by(site, year, ben_group)%>%
@@ -1534,6 +1646,13 @@ adonis2(com_d ~ site_state/transect, data = com_meta, by = "terms", permutations
                   Mid_In_post  = D["Midshore.Post","Inshore.Post"],
                   Off_Mid_pre  = D["Offshore.Pre","Midshore.Pre"],
                   Off_Mid_post = D["Offshore.Post","Midshore.Post"]), 3))
+  }
+  
+  for (t in c("T1","T2")) {
+    j <- com_meta$transect == t
+    cj <- betadisper(as.dist(as.matrix(com_d)[j,j]), droplevels(com_meta$cell[j]))$centroids
+    D <- as.matrix(dist(cj))
+    cat(t, "Off-In:", round(D["Offshore.Post","Inshore.Post"] - D["Offshore.Pre","Inshore.Pre"], 3), "\n")
   }
   
 #### ===> PERMANOVA to test for spatial and temporal effects <=== ####
@@ -2217,4 +2336,105 @@ set.seed(1984)
     perm.acr.period
 
 
-  
+# ========================================================================================
+#
+#             ####  ~~~~  Comparing to Fox 2019 temperature  ~~~ ####
+#
+# ======================================================================================== 
+# Fox, M. D. and others. 2019. Limited coral mortality following acute thermal stress and widespread bleaching on Palmyra Atoll, central Pacific. Coral Reefs 38: 701–712. doi:10.1007/s00338-019-01796-7
+# Mean temperature range (± SD) for the fore reef was 0.25 ± 0.19 °C and 0.81 ± 0.46 °C for the reef terrace
+# temperature recorded every 30 min
+#### ===> Match temperature interval and calculate daily stats <=== ####
+temp30 <- env23 %>%
+  select(datetime, site, temp)%>%
+  mutate(slot = round_date(datetime, "30 minutes"),
+         off  = abs(as.numeric(difftime(datetime, slot, units = "secs")))) %>%
+  group_by(site, slot) %>%
+  slice_min(off, n = 1, with_ties = FALSE) %>%
+  ungroup() %>%
+  mutate(date = as_date(slot), year = year(slot))   
+    ### ==> calculate daily stats
+    daily_stats <- function(d) {
+      d %>%
+        group_by(site, year, date) %>%
+        summarise(n_obs  = n(),
+                  t_mean = mean(temp, na.rm = TRUE),
+                  t_min  = min(temp,  na.rm = TRUE),
+                  t_max  = max(temp,  na.rm = TRUE),
+                  .groups = "drop") %>%
+        mutate(t_range = t_max - t_min)
+    }
+      ## extract
+      daily30 <- daily_stats(temp30)
+        # double check and filter incomplete days
+        daily30 <- daily30 %>% filter(n_obs >= 44)
+        # retain paired measurements from all sites
+        site_levels <- c("offshore", "midshore", "inshore")
+        paired_days <- daily30 %>%
+          count(year, date) %>%
+          filter(n == length(site_levels)) %>%
+          select(year, date)
+        # form frame
+        daily_c <- semi_join(daily30, paired_days, by = c("year", "date"))
+        table(daily_c$site, daily_c$year) 
+        
+#### ===> summarise data <=== ####
+summ_fun <- function(d) {
+  d %>% summarise(n_days     = n(),
+                  mean_range = mean(t_range),
+                  sd_range   = sd(t_range),
+                  median     = median(t_range),
+                  max_range  = max(t_range),
+                  pct_gt1    = 100 * mean(t_range > 1),
+                  .groups = "drop")
+}
+
+range_by_site_year <- daily_c %>% group_by(site, year) %>% summ_fun()
+range_by_site      <- daily_c %>% group_by(site)       %>% summ_fun()
+
+range_by_site_year
+range_by_site 
+
+#### ====> plot figure <=== ####
+site_means <- range_by_site %>% select(site, mean_range)
+fox_ref <- data.frame(
+  ref = c("Fore reef mean (Fox et al. 2019)", "Reef terrace mean (Fox et al. 2019)"),
+  x   = c(0.25, 0.81)
+)
+
+plot.fox<-ggplot(daily_c, aes(x = t_range, fill = site)) +
+  geom_histogram(binwidth = 0.1, boundary = 0,
+                 position = "dodge", colour = "white", linewidth = 0.2) +
+  # this study: site means, coloured to match the bars
+  geom_vline(data = site_means, aes(xintercept = mean_range, colour = site),
+             linewidth = 0.8, show.legend = FALSE) +
+  # Fox et al. 2019 habitat means (grey dotted / dashed)
+  geom_vline(data = fox_ref, aes(xintercept = x, linetype = ref),
+             colour = "grey40", linewidth = 0.5) +
+  scale_fill_manual(values = pal_cols, name = NULL) +
+  scale_colour_manual(values = pal_cols, guide = "none") +
+  scale_linetype_manual(values = c("dotted", "dashed"), name = NULL) +
+  scale_x_continuous(breaks = seq(0, 2, 0.5),
+                     expand = expansion(mult = c(0, 0.01))) +
+  # whole-day counts only (no 2.5 / 7.5 ticks)
+  scale_y_continuous(breaks = function(l) seq(0, ceiling(l[2]), by = 2),
+                     expand = expansion(mult = c(0, 0.05))) +
+  # coord_cartesian zooms without dropping data (scale limits would drop bars)
+  # use xlim = c(0, 2) for a tighter view, c(0, 3) to match Fox et al. exactly
+  coord_cartesian(xlim = c(0, 2)) +
+  labs(x = "Daily temperature range (\u00B0C)",
+       y = "Number of days") +
+  guides(fill     = guide_legend(order = 1),
+         linetype = guide_legend(order = 2, override.aes = list(linewidth = 0.6))) +
+  theme_classic(base_size = 11) +
+  theme(legend.position = "bottom",
+        legend.box      = "vertical",
+        legend.spacing.y = unit(0, "pt"))
+plot.fox
+
+## Save plot
+ggsave("Feedback_Outputs/dailytemprange_subsample.png", 
+       plot=plot.fox, 
+       width = 3.5, height = 3.5, units = "in", scale = 1.5, dpi = 600) 
+
+        
